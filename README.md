@@ -4,7 +4,7 @@ A package to bring component-oriented HTML to Jinja templates, powered by Jinja 
 
 ![PyPI version](https://img.shields.io/pypi/v/jinja2-component-macros)
 ![Python versions](https://img.shields.io/pypi/pyversions/jinja2-component-macros)
-![License](https://img.shields.io/github/license/luciddan/jinja2-component-macros)
+![License](https://img.shields.io/pypi/l/jinja2-component-macros)
 
 ## Overview
 
