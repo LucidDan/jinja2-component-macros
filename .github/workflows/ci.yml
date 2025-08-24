@@ -1,0 +1,143 @@
+# CI workflow
+# - lint/format-check first
+# - build package if lint/format pass
+# - use package artifact to run remaining tests on each environment/py verison
+
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PACKAGE_NAME: jinja2-component-macros
+  UV_VERSION: 0.8.12
+  JUST_VERSION: 1.42.4
+  # Never use .env in CI (just in case a file sneaks into git somehow)
+  JUST_NO_DOTENV: true
+  MIN_COVERAGE: 100
+
+jobs:
+  static-analysis:
+    name: Format, linting, type checking
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          version-file: .python-version-default
+          enable-cache: true
+      - name: Set up Just
+        uses: extractions/setup-crate@v1
+        with:
+          repo: casey/just@${{ env.JUST_VERSION }}
+      - name: Check UV lock file
+        run: just check-lock
+      - name: Check formatting
+        run: just check-format
+      - name: Check linter rules
+        run: just check-lint --output-format=github
+      - name: Check types
+        run: just check-types
+
+  build-package:
+    runs-on: ubuntu-22.04
+    needs: static-analysis
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Set up Just
+        uses: extractions/setup-crate@v1
+        with:
+          repo: casey/just@${{ env.JUST_VERSION }}
+      - name: Check UV lock file
+        run: just check-lock
+      - name: Build package
+        run: just build
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-build-${{ env.PACKAGE_NAME }}
+          path: dist/*
+
+  tests:
+    name: Tests for ${{ matrix.python-version }}
+    runs-on: ubuntu-22.04
+    needs: build-package
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.11', '3.12', '3.13' ]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: pkg-build-${{ env.PACKAGE_NAME }}
+          path: dist
+      - name: Extract sdist
+        run: |
+          tar xzf dist/*.tar.gz --strip-components=1
+          rm -rf src
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Set up Just
+        uses: extractions/setup-crate@v1
+        with:
+          repo: casey/just@${{ env.JUST_VERSION }}
+      - name: Run tests
+        run: just --no-deps test dist/*.whl py${PYTHON_VERSION//./}-tests
+      - name: Upload cov data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov-data-${{ matrix.python-version }}
+          path: .coverage.*
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  full-coverage:
+    runs-on: ubuntu-22.04
+    needs: tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          version-file: .python-version-default
+          enable-cache: true
+      - name: Set up Just
+        uses: extractions/setup-crate@v1
+        with:
+          repo: casey/just@${{ env.JUST_VERSION }}
+      - name: Download cov data
+        uses: actions/download-artifact@v5
+        with:
+          pattern: cov-data-*
+          merge-multiple: true
+      - name: Combine coverage
+        run: just --no-deps check-coverage ${{env.MIN_COVERAGE}} >> $GITHUB_STEP_SUMMARY
+      - name: Upload HTML report if coverage failure
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov-html-report
+          path: htmlcov
+        if: ${{ failure() }}

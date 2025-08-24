@@ -1,0 +1,167 @@
+[build-system]
+requires = ["uv_build>=0.8.5,<0.9.0"]
+build-backend = "uv_build"
+
+
+[project]
+name = "jinja2-component-macros"
+version = "2025.1"
+authors = [{name = "Dan Sloan", email = "dan@dansloan.dev"}]
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+description = "A Jinja2 extension for writing component-like HTML that gets converted into Jinja macro calls"
+readme = "README.md"
+keywords = ["jinja2", "templates", "components", "html", "macros", "web"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Markup :: HTML",
+    "Typing :: Typed",
+]
+dependencies = [
+    "jinja2>=3.1.0",
+]
+
+
+[project.urls]
+Homepage = "https://github.com/luciddan/jinja2-component-macros"
+Repository = "https://github.com/luciddan/jinja2-component-macros"
+Issues = "https://github.com/luciddan/jinja2-component-macros/issues"
+Changelog = "https://github.com/luciddan/jinja2-component-macros/blob/main/CHANGELOG.md"
+
+
+[dependency-groups]
+type-checking = [
+    { include-group = "testing"},
+    "mypy>=1.13.0",
+]
+linting = [
+    "ruff>=0.12.0",
+]
+testing = [
+    "coverage[toml]>=7.0.0",
+    "pytest-github-actions-annotate-failures>=0.2.0",
+    "pytest-randomly>=3.16.0",
+    "pytest-xdist>=3.6.1",
+    "pytest>=8.3.3",
+    "pytest-cov>=6.2.0",
+]
+dev = [
+    "tox>=4.28.0",
+    "tox-uv>=1.28.0",
+    { include-group = "testing"},
+    { include-group = "linting"},
+    { include-group = "type-checking"},
+]
+
+[tool.uv]
+package = true
+
+[tool.uv.build-backend]
+source-include = [
+    "tests/**",
+    "tox.ini",
+    "justfile",
+]
+
+
+[tool.mypy]
+plugins = []
+files = [
+    "src",
+    "tests",
+]
+
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = ["--strict-markers", "--strict-config"]
+xfail_strict = true
+markers = []
+filterwarnings = []
+testpaths = [
+    "tests",
+]
+required_plugins = [
+    "pytest-github-actions-annotate-failures>=0.2.0",
+]
+
+[tool.coverage.run]
+parallel = true
+branch = true
+source = ["jinja2_component_macros"]
+
+[tool.coverage.paths]
+source = [
+    "src",
+    ".tox/py*/**/site-packages",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 100
+
+[tool.ruff]
+src = [
+    "src",
+    "tests",
+]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "A",       # shadowing is fine
+    "ANN",     # Mypy is better at this
+    "ARG",     # unused arguments are common w/ interfaces
+    "C901",    # sometimes you trade complexity for performance
+    "COM",     # Formatter takes care of our commas
+    "D",       # We prefer our own docstring style.
+    "E501",    # leave line-length enforcement to formatter
+    "EM101",   # simple strings are fine
+    "FBT",     # bools are our friends
+    "INP001",  # sometimes we want Python files outside of packages
+    "ISC001",  # conflicts with formatter
+    "N802",    # some names are non-pep8 due to stdlib logging / Twisted
+    "N803",    # ditto
+    "N806",    # ditto
+    "PLC0415", # sometimes, imports have to live elsewhere
+    "PLR0913", # leave complexity to me
+    "PLR2004", # numbers are sometimes fine
+    "PLW1641", # unhashable is often fine
+    "PLW2901", # overwriting a loop var can be useful
+    "RUF001",  # leave my smart characters alone
+    "SLF001",  # private members are accessed by friendly functions
+    "T201",    # prints are fine
+    "TC",      # TYPE_CHECKING blocks break autodocs
+    "TD",      # we don't follow other people's todo style
+    "TID252",  # Relative imports are fine
+    "TRY003",  # simple strings are fine
+    "TRY004",  # too many false negatives
+    "TRY300",  # else blocks are nice, but code-locality is nicer
+    "PTH",     # pathlib can be slow, so no point to rewrite
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "B018",    # "useless" expressions can be useful in tests
+    "BLE",     # tests have different rules around exceptions
+    "EM",      # tests have different rules around exceptions
+    "LOG001",  # need to instantiate log messages in tests
+    "PLC1901", # empty strings are falsey, but are less specific in tests
+    "RUF012",  # no type hints in tests
+    "S",       # it's test; chill out security
+    "SIM300",  # Yoda rocks in tests
+    "TRY",     # tests have different rules around exceptions
+]

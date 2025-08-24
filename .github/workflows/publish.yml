@@ -1,0 +1,115 @@
+name: Publish to PyPI
+
+# For now, we build on every push to main, but we only publish to test-pypi on workflow dispatch.
+# We publish to production pypi when there is a github release.
+on:
+#  push:
+#    branches: [main]
+#    tags: ["*"]
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+env:
+  # Never use .env in CI (just in case a file sneaks into git somehow)
+  JUST_NO_DOTENV: true
+
+jobs:
+  vars:
+    name: Define variables
+    # Disable the whole workflow if this is a forked repo
+    if: github.repository_owner == 'luciddan'
+    runs-on: ubuntu-22.04
+    outputs:
+      uv_version: ${{ steps.vars.outputs.uv_version }}
+      just_version: ${{ steps.vars.outputs.just_version }}
+      package_name: ${{ steps.vars.outputs.package_name }}
+    steps:
+      - name: Partial checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout-cone-mode: 'false'
+          sparse-checkout: |
+            .uv-version
+            .just-version
+            pyproject.toml
+      - name: Get variables
+        id: vars
+        run: |
+          echo "uv_version=$(cat .uv-version)" >> $GITHUB_OUTPUT
+          echo "just_version=$(cat .just-version)" >> $GITHUB_OUTPUT
+          pip install tomli
+          python -c "import tomli;import pathlib;print('package_name=' + tomli.loads(pathlib.Path('pyproject.toml').read_text())['project']['name'])" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build package
+    needs: [vars]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ needs.vars.outputs.uv_version }}
+          enable-cache: true
+      - name: Set up Just
+        uses: extractions/setup-crate@v1
+        with:
+          repo: casey/just@${{ needs.vars.outputs.just_version }}
+      - name: Check UV lock file
+        run: just check-lock
+      - name: Build package
+        run: just build
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-build-${{ needs.vars.outputs.package_name }}
+          path: dist/*
+
+  publish-test-pypi:
+    name: Publish in-dev package to test.pypi.org
+    environment:
+      name: test-pypi
+      url: https://test.pypi.org/p/${{ needs.vars.outputs.package_name }}
+#    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    needs: [vars,build]
+    permissions:
+      id-token: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: pkg-build-${{ needs.vars.outputs.package_name }}
+          path: dist
+      - name: Upload package to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
+          repository-url: https://test.pypi.org/legacy/
+
+
+  # Upload to real PyPI on GitHub Releases.
+  publish-release-pypi:
+    name: Publish released package to pypi.org
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ needs.vars.outputs.package_name }}
+    if: github.event.action == 'published'
+    runs-on: ubuntu-22.04
+    needs: [vars,build]
+    permissions:
+      id-token: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: pkg-build-${{ needs.vars.outputs.package_name }}
+          path: dist
+      - name: Upload package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
